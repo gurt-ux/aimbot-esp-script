@@ -1,0 +1,380 @@
+--// LocalScript — StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+--== Settings ==--
+local SETTINGS = {
+	MinRadius = 60,
+	MaxRadius = 350,
+	DefaultRadius = 160,
+
+	MinSmooth = 0.05,
+	MaxSmooth = 0.5,
+	DefaultSmooth = 0.15,
+
+	CircleThickness = 3,
+	ToggleKey = Enum.KeyCode.Q, -- toggle aimlock
+	PanelToggleKey = Enum.KeyCode.RightShift, -- keyboard fallback
+
+	ESPColor = Color3.fromRGB(0, 255, 0),
+}
+
+--== State ==--
+local AimlockEnabled = true
+local ESPEnabled = true
+local PanelVisible = true
+local CircleRadius = SETTINGS.DefaultRadius
+local Smoothness = SETTINGS.DefaultSmooth
+local DraggingSlider = nil
+local CurrentTarget
+
+--== ESP (Billboard) ==--
+local function getESP(player)
+	local char = player.Character
+	if not char then return nil end
+	local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+	if not torso then return nil end
+
+	local esp = torso:FindFirstChild("AimlockESP")
+	if not esp then
+		esp = Instance.new("BillboardGui")
+		esp.Name = "AimlockESP"
+		esp.Size = UDim2.new(0, 40, 0, 40)
+		esp.AlwaysOnTop = true
+		esp.Adornee = torso
+		esp.MaxDistance = 5000
+		esp.Parent = torso
+
+		local box = Instance.new("Frame")
+		box.Size = UDim2.fromScale(1, 1)
+		box.BackgroundColor3 = SETTINGS.ESPColor
+		box.BackgroundTransparency = 0.3
+		box.BorderSizePixel = 0
+		box.Parent = esp
+	end
+	esp.Enabled = ESPEnabled
+	return esp
+end
+
+--== UI ==--
+local function createUI()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "AimlockUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Reticle
+	local circle = Instance.new("Frame")
+	circle.AnchorPoint = Vector2.new(0.5, 0.5)
+	circle.Position = UDim2.fromScale(0.5, 0.5)
+	circle.Size = UDim2.fromOffset(CircleRadius * 2, CircleRadius * 2)
+	circle.BackgroundTransparency = 1
+	circle.Visible = AimlockEnabled
+	circle.Parent = gui
+
+	local circleStroke = Instance.new("UIStroke")
+	circleStroke.Parent = circle
+	circleStroke.Thickness = SETTINGS.CircleThickness
+	circleStroke.Color = Color3.fromRGB(255, 60, 60)
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = circle
+
+	-- Panel
+	local panel = Instance.new("Frame")
+	panel.Position = UDim2.fromOffset(60, 60)
+	panel.Size = UDim2.fromOffset(260, 200)
+	panel.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+	panel.BackgroundTransparency = 0.1
+	panel.Visible = PanelVisible
+	panel.Parent = gui
+	Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 60, 60)
+	stroke.Thickness = 1
+	stroke.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Position = UDim2.fromOffset(12, 6)
+	title.Size = UDim2.fromOffset(200, 20)
+	title.BackgroundTransparency = 1
+	title.Text = "Aimlock Controls"
+	title.TextColor3 = Color3.new(1,1,1)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 18
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = panel
+
+	-- Toggle Button (Aimlock)
+	local toggle = Instance.new("TextButton")
+	toggle.Position = UDim2.fromOffset(12, 32)
+	toggle.Size = UDim2.fromOffset(236, 30)
+	toggle.Text = "Aimlock: ON"
+	toggle.Font = Enum.Font.Gotham
+	toggle.TextSize = 16
+	toggle.TextColor3 = Color3.new(1,1,1)
+	toggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	toggle.Parent = panel
+	Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,8)
+
+	-- Toggle Button (ESP)
+	local espToggle = Instance.new("TextButton")
+	espToggle.Position = UDim2.fromOffset(12, 70)
+	espToggle.Size = UDim2.fromOffset(236, 30)
+	espToggle.Text = "ESP: ON"
+	espToggle.Font = Enum.Font.Gotham
+	espToggle.TextSize = 16
+	espToggle.TextColor3 = Color3.new(1,1,1)
+	espToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	espToggle.Parent = panel
+	Instance.new("UICorner", espToggle).CornerRadius = UDim.new(0,8)
+
+	-- Slider helper
+	local function makeSlider(name, y)
+		local label = Instance.new("TextLabel")
+		label.Position = UDim2.fromOffset(12, y)
+		label.Size = UDim2.fromOffset(236, 16)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Gotham
+		label.TextSize = 14
+		label.TextColor3 = Color3.fromRGB(220,220,220)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Name = name.."Label"
+		label.Parent = panel
+
+		local track = Instance.new("Frame")
+		track.Position = UDim2.fromOffset(12, y+18)
+		track.Size = UDim2.fromOffset(236, 8)
+		track.BackgroundColor3 = Color3.fromRGB(55,55,55)
+		track.Name = name.."Track"
+		track.Parent = panel
+		Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
+
+		local fill = Instance.new("Frame")
+		fill.Size = UDim2.fromOffset(0,8)
+		fill.BackgroundColor3 = Color3.fromRGB(255,60,60)
+		fill.Name = "Fill"
+		fill.Parent = track
+		Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
+
+		local knob = Instance.new("Frame")
+		knob.Size = UDim2.fromOffset(14,14)
+		knob.Position = UDim2.fromOffset(-7,-3)
+		knob.BackgroundColor3 = Color3.fromRGB(240,240,240)
+		knob.Name = "Knob"
+		knob.Parent = track
+		Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+		local kStroke = Instance.new("UIStroke")
+		kStroke.Color = Color3.fromRGB(255,60,60)
+		kStroke.Parent = knob
+
+		return label, track, fill, knob
+	end
+
+	local radiusLabel, radiusTrack, radiusFill, radiusKnob = makeSlider("Radius", 110)
+	local smoothLabel, smoothTrack, smoothFill, smoothKnob = makeSlider("Smoothness", 150)
+
+	-- Update functions
+	local function refreshAll()
+		radiusLabel.Text = ("Radius: %d px"):format(CircleRadius)
+		smoothLabel.Text = ("Smoothness: %.2f"):format(Smoothness)
+		circle.Size = UDim2.fromOffset(CircleRadius * 2, CircleRadius * 2)
+
+		local function setSlider(track, fill, knob, minVal, maxVal, value)
+			local alpha = (value-minVal)/(maxVal-minVal)
+			local width = track.AbsoluteSize.X
+			local px = math.clamp(alpha*width,0,width)
+			fill.Size = UDim2.fromOffset(px, track.Size.Y.Offset)
+			knob.Position = UDim2.fromOffset(px-7,-3)
+		end
+		setSlider(radiusTrack,radiusFill,radiusKnob,SETTINGS.MinRadius,SETTINGS.MaxRadius,CircleRadius)
+		setSlider(smoothTrack,smoothFill,smoothKnob,SETTINGS.MinSmooth,SETTINGS.MaxSmooth,Smoothness)
+	end
+	refreshAll()
+
+	-- Toggle Aimlock
+	local function setToggleVisual()
+		toggle.Text = AimlockEnabled and "Aimlock: ON" or "Aimlock: OFF"
+		circle.Visible = AimlockEnabled
+	end
+	toggle.MouseButton1Click:Connect(function()
+		AimlockEnabled = not AimlockEnabled
+		setToggleVisual()
+	end)
+	setToggleVisual()
+
+	-- Toggle ESP
+	local function setESPToggleVisual()
+		espToggle.Text = ESPEnabled and "ESP: ON" or "ESP: OFF"
+	end
+	espToggle.MouseButton1Click:Connect(function()
+		ESPEnabled = not ESPEnabled
+		setESPToggleVisual()
+	end)
+	setESPToggleVisual()
+
+	-- Slider input
+	local function updateDrag(name, x)
+		local track,minVal,maxVal
+		if name=="Radius" then
+			track=radiusTrack
+			minVal,maxVal=SETTINGS.MinRadius,SETTINGS.MaxRadius
+		else
+			track=smoothTrack
+			minVal,maxVal=SETTINGS.MinSmooth,SETTINGS.MaxSmooth
+		end
+		local left=track.AbsolutePosition.X
+		local width=track.AbsoluteSize.X
+		local alpha=math.clamp((x-left)/width,0,1)
+		local val=minVal+alpha*(maxVal-minVal)
+		if name=="Radius" then
+			CircleRadius=math.floor(val)
+		else
+			Smoothness=val
+		end
+		refreshAll()
+	end
+
+	local function beginDrag(name) DraggingSlider=name end
+	local function endDrag() DraggingSlider=nil end
+
+	for _,track in pairs({radiusTrack,smoothTrack}) do
+		track.InputBegan:Connect(function(input)
+			if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+				beginDrag(track.Name:find("Radius") and "Radius" or "Smoothness")
+				updateDrag(DraggingSlider,input.Position.X)
+			end
+		end)
+	end
+	UserInputService.InputChanged:Connect(function(input)
+		if DraggingSlider and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
+			updateDrag(DraggingSlider,input.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if DraggingSlider and (input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch) then
+			endDrag()
+		end
+	end)
+
+	-- Hotkeys
+	UserInputService.InputBegan:Connect(function(input,gp)
+		if gp then return end
+		if input.KeyCode==SETTINGS.ToggleKey then
+			AimlockEnabled = not AimlockEnabled
+			setToggleVisual()
+		elseif input.KeyCode==SETTINGS.PanelToggleKey then
+			PanelVisible = not PanelVisible
+			panel.Visible = PanelVisible
+		end
+	end)
+
+	-- Settings Button (mobile + PC)
+	local settingsBtn = Instance.new("TextButton")
+	settingsBtn.Size = UDim2.fromOffset(50, 50)
+	settingsBtn.Position = UDim2.fromOffset(10, Camera.ViewportSize.Y/2 - 100)
+	settingsBtn.Text = "⚙"
+	settingsBtn.Font = Enum.Font.GothamBold
+	settingsBtn.TextSize = 24
+	settingsBtn.TextColor3 = Color3.new(1,1,1)
+	settingsBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	settingsBtn.Parent = gui
+	Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(1,0)
+
+	settingsBtn.MouseButton1Click:Connect(function()
+		PanelVisible = not PanelVisible
+		panel.Visible = PanelVisible
+	end)
+
+	return circle
+end
+
+local circle = createUI()
+
+--== Helpers ==--
+local function isAlive(char)
+	if not char then return false end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	return hum and hum.Health > 0
+end
+
+local function getHead(char) return char and char:FindFirstChild("Head") end
+
+local function dist2(a,b) local dx,dy=a.X-b.X,a.Y-b.Y return math.sqrt(dx*dx+dy*dy) end
+
+local function hasLineOfSight(head, char)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	params.FilterDescendantsInstances = {char, LocalPlayer.Character}
+	local dir = (head.Position - Camera.CFrame.Position)
+	local result = Workspace:Raycast(Camera.CFrame.Position, dir, params)
+	return result == nil
+end
+
+local function findTarget()
+	local vp = Camera.ViewportSize
+	local center = Vector2.new(vp.X/2,vp.Y/2)
+	local best,bestDist=nil,math.huge
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if plr~=LocalPlayer then
+			if (plr.Team and LocalPlayer.Team and plr.Team~=LocalPlayer.Team) or (plr.Team==nil or LocalPlayer.Team==nil) then
+				local char=plr.Character
+				if isAlive(char) then
+					local head=getHead(char)
+					if head then
+						local pos,onscreen=Camera:WorldToViewportPoint(head.Position)
+						if onscreen and pos.Z>0 then
+							local d=dist2(Vector2.new(pos.X,pos.Y),center)
+							if d<=CircleRadius and d<bestDist then
+								if hasLineOfSight(head,char) then
+									bestDist=d
+									best=plr
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+--== Main loop ==--
+RunService.RenderStepped:Connect(function()
+	-- Add ESP to enemies
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if plr~=LocalPlayer then
+			if (plr.Team and LocalPlayer.Team and plr.Team~=LocalPlayer.Team) or (plr.Team==nil or LocalPlayer.Team==nil) then
+				local esp = getESP(plr)
+				if esp then
+					esp.Enabled = ESPEnabled
+				end
+			end
+		end
+	end
+
+	if not AimlockEnabled then
+		CurrentTarget=nil
+		return
+	end
+
+	CurrentTarget=findTarget()
+	if CurrentTarget then
+		local head=getHead(CurrentTarget.Character)
+		if head then
+			local camPos=Camera.CFrame.Position
+			local desired=CFrame.lookAt(camPos,head.Position)
+			Camera.CFrame=Camera.CFrame:Lerp(desired,Smoothness)
+		end
+	end
+end)
