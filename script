@@ -1,5 +1,5 @@
---// Aimlock + ESP with UI (Random Body Parts)
--- Place in StarterPlayerScripts as a LocalScript
+--// Aimlock + ESP with Clean Original UI + Random Body Parts
+-- Put this in StarterPlayerScripts as a LocalScript
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,7 +12,6 @@ local cam = Workspace.CurrentCamera
 -- Settings
 local SETTINGS = {
 	CircleRadius = 100,
-	ESPColor = Color3.fromRGB(0,255,0),
 	Smoothness = 0.2,
 	IgnoreTeammates = true,
 }
@@ -23,115 +22,84 @@ local SettingsOpen = false
 local currentTarget = nil
 local TargetPart = nil
 
---// UI
+--// Clean UI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 ScreenGui.ResetOnSpawn = false
 
--- Toggle button to open/close settings
-local openButton = Instance.new("TextButton")
-openButton.Size = UDim2.fromOffset(100, 30)
-openButton.Position = UDim2.new(0, 20, 0, 20)
-openButton.Text = "Settings"
-openButton.Parent = ScreenGui
-openButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
-openButton.TextColor3 = Color3.new(1,1,1)
-
-local panel = Instance.new("Frame")
-panel.Size = UDim2.fromOffset(260, 220)
-panel.Position = UDim2.new(0, 20, 0, 60)
-panel.BackgroundColor3 = Color3.fromRGB(25,25,25)
-panel.Visible = false
-panel.Parent = ScreenGui
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
-
--- Circle Toggle
-local circleToggle = Instance.new("TextButton")
-circleToggle.Position = UDim2.fromOffset(12, 12)
-circleToggle.Size = UDim2.fromOffset(236, 30)
-circleToggle.Text = "Circle: ON"
-circleToggle.Parent = panel
-circleToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
-circleToggle.TextColor3 = Color3.new(1,1,1)
-
--- ESP Toggle
-local espToggle = Instance.new("TextButton")
-espToggle.Position = UDim2.fromOffset(12, 48)
-espToggle.Size = UDim2.fromOffset(236, 30)
-espToggle.Text = "ESP: ON"
-espToggle.Parent = panel
-espToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
-espToggle.TextColor3 = Color3.new(1,1,1)
-
--- Ignore teammates toggle
-local teamToggle = Instance.new("TextButton")
-teamToggle.Position = UDim2.fromOffset(12, 84)
-teamToggle.Size = UDim2.fromOffset(236, 30)
-teamToggle.Text = "Ignore Teammates: ON"
-teamToggle.Parent = panel
-teamToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
-teamToggle.TextColor3 = Color3.new(1,1,1)
-
--- Smoothness slider
-local smoothLabel = Instance.new("TextLabel")
-smoothLabel.Position = UDim2.fromOffset(12, 120)
-smoothLabel.Size = UDim2.fromOffset(236, 20)
-smoothLabel.Text = "Smoothness: "..SETTINGS.Smoothness
-smoothLabel.TextColor3 = Color3.new(1,1,1)
-smoothLabel.BackgroundTransparency = 1
-smoothLabel.Parent = panel
-
-local smoothSlider = Instance.new("TextButton")
-smoothSlider.Position = UDim2.fromOffset(12, 144)
-smoothSlider.Size = UDim2.fromOffset(236, 20)
-smoothSlider.Text = ""
-smoothSlider.BackgroundColor3 = Color3.fromRGB(60,60,60)
-smoothSlider.Parent = panel
-
-local smoothKnob = Instance.new("Frame")
-smoothKnob.Size = UDim2.fromOffset(10,20)
-smoothKnob.Position = UDim2.fromOffset(SETTINGS.Smoothness*236,0)
-smoothKnob.BackgroundColor3 = Color3.fromRGB(200,200,200)
-smoothKnob.Parent = smoothSlider
-
--- Circle slider
-local circleLabel = Instance.new("TextLabel")
-circleLabel.Position = UDim2.fromOffset(12, 168)
-circleLabel.Size = UDim2.fromOffset(236, 20)
-circleLabel.Text = "Circle Radius: "..SETTINGS.CircleRadius
-circleLabel.TextColor3 = Color3.new(1,1,1)
-circleLabel.BackgroundTransparency = 1
-circleLabel.Parent = panel
-
-local circleSlider = Instance.new("TextButton")
-circleSlider.Position = UDim2.fromOffset(12, 188)
-circleSlider.Size = UDim2.fromOffset(236, 20)
-circleSlider.Text = ""
-circleSlider.BackgroundColor3 = Color3.fromRGB(60,60,60)
-circleSlider.Parent = panel
-
-local circleKnob = Instance.new("Frame")
-circleKnob.Size = UDim2.fromOffset(10,20)
-circleKnob.Position = UDim2.fromOffset((SETTINGS.CircleRadius/300)*236,0)
-circleKnob.BackgroundColor3 = Color3.fromRGB(200,200,200)
-circleKnob.Parent = circleSlider
-
--- Circle display
+-- Circle in middle
 local circleFrame = Instance.new("Frame")
 circleFrame.AnchorPoint = Vector2.new(0.5,0.5)
 circleFrame.Position = UDim2.fromScale(0.5,0.5)
 circleFrame.Size = UDim2.fromOffset(SETTINGS.CircleRadius*2, SETTINGS.CircleRadius*2)
 circleFrame.BackgroundTransparency = 1
+circleFrame.Visible = AimlockEnabled
 circleFrame.Parent = ScreenGui
 
-local circleUI = Instance.new("UICorner")
-circleUI.CornerRadius = UDim.new(1,0)
-circleUI.Parent = circleFrame
+local circleStroke = Instance.new("UIStroke")
+circleStroke.Thickness = 2
+circleStroke.Color = Color3.fromRGB(255,0,0)
+circleStroke.Parent = circleFrame
 
-local circleOutline = Instance.new("UIStroke")
-circleOutline.Thickness = 2
-circleOutline.Color = Color3.fromRGB(255,0,0)
-circleOutline.Parent = circleFrame
+-- Settings panel
+local panel = Instance.new("Frame")
+panel.Size = UDim2.fromOffset(200, 160)
+panel.Position = UDim2.new(0, 20, 0, 60)
+panel.BackgroundColor3 = Color3.fromRGB(30,30,30)
+panel.Visible = false
+panel.Parent = ScreenGui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
+
+-- Open/close button
+local openButton = Instance.new("TextButton")
+openButton.Size = UDim2.fromOffset(80, 30)
+openButton.Position = UDim2.new(0, 20, 0, 20)
+openButton.Text = "Settings"
+openButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
+openButton.TextColor3 = Color3.new(1,1,1)
+openButton.Parent = ScreenGui
+
+-- Toggles
+local circleToggle = Instance.new("TextButton")
+circleToggle.Size = UDim2.fromOffset(180, 25)
+circleToggle.Position = UDim2.fromOffset(10, 10)
+circleToggle.Text = "Circle: ON"
+circleToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+circleToggle.TextColor3 = Color3.new(1,1,1)
+circleToggle.Parent = panel
+
+local espToggle = Instance.new("TextButton")
+espToggle.Size = UDim2.fromOffset(180, 25)
+espToggle.Position = UDim2.fromOffset(10, 40)
+espToggle.Text = "ESP: ON"
+espToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+espToggle.TextColor3 = Color3.new(1,1,1)
+espToggle.Parent = panel
+
+local teamToggle = Instance.new("TextButton")
+teamToggle.Size = UDim2.fromOffset(180, 25)
+teamToggle.Position = UDim2.fromOffset(10, 70)
+teamToggle.Text = "Ignore Teammates: ON"
+teamToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+teamToggle.TextColor3 = Color3.new(1,1,1)
+teamToggle.Parent = panel
+
+-- Sliders (circle + smoothness)
+local circleSlider = Instance.new("TextButton")
+circleSlider.Size = UDim2.fromOffset(180, 20)
+circleSlider.Position = UDim2.fromOffset(10, 100)
+circleSlider.Text = "Circle Size"
+circleSlider.BackgroundColor3 = Color3.fromRGB(60,60,60)
+circleSlider.TextColor3 = Color3.new(1,1,1)
+circleSlider.Parent = panel
+
+local smoothSlider = Instance.new("TextButton")
+smoothSlider.Size = UDim2.fromOffset(180, 20)
+smoothSlider.Position = UDim2.fromOffset(10, 130)
+smoothSlider.Text = "Smoothness"
+smoothSlider.BackgroundColor3 = Color3.fromRGB(60,60,60)
+smoothSlider.TextColor3 = Color3.new(1,1,1)
+smoothSlider.Parent = panel
 
 --// Toggle logic
 openButton.MouseButton1Click:Connect(function()
@@ -155,29 +123,26 @@ teamToggle.MouseButton1Click:Connect(function()
 	teamToggle.Text = "Ignore Teammates: "..(SETTINGS.IgnoreTeammates and "ON" or "OFF")
 end)
 
--- Slider logic
-local draggingSmooth, draggingCircle = false, false
-smoothSlider.MouseButton1Down:Connect(function() draggingSmooth = true end)
+-- Slider dragging
+local draggingCircle, draggingSmooth = false, false
 circleSlider.MouseButton1Down:Connect(function() draggingCircle = true end)
+smoothSlider.MouseButton1Down:Connect(function() draggingSmooth = true end)
+
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingSmooth, draggingCircle = false, false
+		draggingCircle, draggingSmooth = false, false
 	end
 end)
 
 RunService.RenderStepped:Connect(function()
-	if draggingSmooth then
-		local pos = math.clamp((UserInputService:GetMouseLocation().X - smoothSlider.AbsolutePosition.X)/smoothSlider.AbsoluteSize.X,0,1)
-		SETTINGS.Smoothness = math.max(0.05, pos)
-		smoothKnob.Position = UDim2.fromOffset(pos*236,0)
-		smoothLabel.Text = "Smoothness: "..string.format("%.2f",SETTINGS.Smoothness)
-	end
 	if draggingCircle then
-		local pos = math.clamp((UserInputService:GetMouseLocation().X - circleSlider.AbsolutePosition.X)/circleSlider.AbsoluteSize.X,0,1)
+		local pos = math.clamp((UserInputService:GetMouseLocation().X - circleSlider.AbsolutePosition.X) / circleSlider.AbsoluteSize.X, 0, 1)
 		SETTINGS.CircleRadius = math.floor(pos*300)
-		circleKnob.Position = UDim2.fromOffset(pos*236,0)
-		circleLabel.Text = "Circle Radius: "..SETTINGS.CircleRadius
 		circleFrame.Size = UDim2.fromOffset(SETTINGS.CircleRadius*2, SETTINGS.CircleRadius*2)
+	end
+	if draggingSmooth then
+		local pos = math.clamp((UserInputService:GetMouseLocation().X - smoothSlider.AbsolutePosition.X) / smoothSlider.AbsoluteSize.X, 0, 1)
+		SETTINGS.Smoothness = math.max(0.05, pos)
 	end
 end)
 
@@ -186,8 +151,7 @@ local function getESP(player)
 	local char = player.Character
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hrp or not hum then return end
+	if not hrp then return end
 
 	local esp = hrp:FindFirstChild("AimlockESP")
 	if not esp then
@@ -195,13 +159,12 @@ local function getESP(player)
 		esp.Name = "AimlockESP"
 		esp.AlwaysOnTop = true
 		esp.Adornee = hrp
-		esp.MaxDistance = 5000
-		esp.Size = UDim2.new(4,0,6,0) -- covers whole body roughly
+		esp.Size = UDim2.new(4,0,6,0)
 		esp.Parent = hrp
 
 		local box = Instance.new("Frame")
 		box.Size = UDim2.fromScale(1,1)
-		box.BackgroundColor3 = SETTINGS.ESPColor
+		box.BackgroundColor3 = Color3.fromRGB(0,255,0)
 		box.BackgroundTransparency = 0.6
 		box.BorderSizePixel = 0
 		box.Parent = esp
@@ -209,11 +172,7 @@ local function getESP(player)
 	esp.Enabled = ESPEnabled
 end
 
---// Targeting
-local params = RaycastParams.new()
-params.FilterType = Enum.RaycastFilterType.Blacklist
-params.FilterDescendantsInstances = {LocalPlayer.Character}
-
+--// Random Target Parts
 local function getTargetParts(char)
 	local parts = {}
 	for _, partName in ipairs({
@@ -226,6 +185,11 @@ local function getTargetParts(char)
 	end
 	return parts
 end
+
+--// Target finder
+local params = RaycastParams.new()
+params.FilterType = Enum.RaycastFilterType.Blacklist
+params.FilterDescendantsInstances = {LocalPlayer.Character}
 
 local function findTarget()
 	local bestTarget
@@ -240,7 +204,7 @@ local function findTarget()
 			if hrp and hum and hum.Health > 0 then
 				local pos, onScreen = cam:WorldToViewportPoint(hrp.Position)
 				if onScreen then
-					local dist = (Vector2.new(pos.X,pos.Y)-Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)).Magnitude
+					local dist = (Vector2.new(pos.X,pos.Y) - Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)).Magnitude
 					if dist <= SETTINGS.CircleRadius then
 						local ray = Workspace:Raycast(cam.CFrame.Position,(hrp.Position-cam.CFrame.Position).Unit*500,params)
 						if ray and ray.Instance and ray.Instance:IsDescendantOf(char) then
@@ -256,7 +220,6 @@ local function findTarget()
 	if bestTarget then
 		if currentTarget ~= bestTarget then
 			currentTarget = bestTarget
-			-- 🎯 Random body part selection
 			local parts = getTargetParts(currentTarget.Character)
 			TargetPart = (#parts > 0) and parts[math.random(1,#parts)] or nil
 		end
@@ -266,7 +229,7 @@ local function findTarget()
 	return currentTarget, TargetPart
 end
 
---// Camera update
+--// Aim update
 RunService.RenderStepped:Connect(function()
 	if AimlockEnabled then
 		local target, part = findTarget()
