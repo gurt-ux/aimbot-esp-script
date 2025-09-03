@@ -153,7 +153,7 @@ local function createUI()
 	toggle.Text = "Aimlock: ON"
 	toggle.Font = Enum.Font.Gotham
 	toggle.TextSize = 16
-	toggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	toggle.BackgroundColor3 = Color3.fromRGB(1,1,1)
 	Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,8)
 
 	-- ESP toggle
@@ -163,7 +163,7 @@ local function createUI()
 	espToggle.Text = "ESP: ON"
 	espToggle.Font = Enum.Font.Gotham
 	espToggle.TextSize = 16
-	espToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	espToggle.BackgroundColor3 = Color3.fromRGB(1,1,1)
 	Instance.new("UICorner", espToggle).CornerRadius = UDim.new(0,8)
 
 	-- Ignore teammates toggle
@@ -173,7 +173,7 @@ local function createUI()
 	teamToggle.Text = "Ignore Teammates: ON"
 	teamToggle.Font = Enum.Font.Gotham
 	teamToggle.TextSize = 16
-	teamToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	teamToggle.BackgroundColor3 = Color3.fromRGB(1,1,1)
 	Instance.new("UICorner", teamToggle).CornerRadius = UDim.new(0,8)
 
 	-- slider factory
