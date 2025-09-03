@@ -45,16 +45,16 @@ local function getESP(player)
 	if not esp then
 		esp = Instance.new("BillboardGui")
 		esp.Name = "AimlockESP"
-		esp.Size = UDim2.new(0, 40, 0, 40)
 		esp.AlwaysOnTop = true
 		esp.Adornee = torso
 		esp.MaxDistance = 5000
+		esp.Size = UDim2.new(1, 0, 1, 0) -- matches torso size
 		esp.Parent = torso
 
 		local box = Instance.new("Frame")
 		box.Size = UDim2.fromScale(1, 1)
 		box.BackgroundColor3 = SETTINGS.ESPColor
-		box.BackgroundTransparency = 0.3
+		box.BackgroundTransparency = 0.6 -- more transparent
 		box.BorderSizePixel = 0
 		box.Parent = esp
 	end
