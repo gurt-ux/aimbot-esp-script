@@ -35,7 +35,7 @@ local CircleRadius = SETTINGS.DefaultRadius
 local Smoothness = SETTINGS.DefaultSmooth
 local DraggingSlider = nil
 local CurrentTarget
-local TargetPart -- 🎯 stores the random body part we picked
+local TargetPart -- 🎯 stores the random part chosen
 
 -- Utility: safe GetBoundingBox fallback
 local function safeGetBoundingBox(model)
@@ -67,17 +67,6 @@ local function safeGetBoundingBox(model)
 	return CFrame.new(center), size
 end
 
--- 🎯 Get all possible target parts of a character
-local function getTargetParts(char)
-	local parts = {}
-	for _, v in ipairs(char:GetChildren()) do
-		if v:IsA("BasePart") then
-			table.insert(parts, v)
-		end
-	end
-	return parts
-end
-
 -- ESP creation & update
 local function ensureESPForPlayer(player)
 	local char = player.Character
@@ -94,13 +83,14 @@ local function ensureESPForPlayer(player)
 		esp.AlwaysOnTop = true
 		esp.Parent = hrp
 		esp.MaxDistance = 1e6
+		-- initial small pixel size; we'll update every frame to match bounding box on-screen
 		esp.Size = UDim2.fromOffset(40, 80)
 
 		local box = Instance.new("Frame")
 		box.Name = "Box"
 		box.Size = UDim2.fromScale(1, 1)
 		box.BackgroundColor3 = SETTINGS.ESPColor
-		box.BackgroundTransparency = 0.6
+		box.BackgroundTransparency = 0.6  -- semi-transparent
 		box.BorderSizePixel = 0
 		box.Parent = esp
 	end
@@ -109,7 +99,276 @@ local function ensureESPForPlayer(player)
 	return esp
 end
 
--- (UI code unchanged, skipped for brevity — keep your same UI from before)
+-- UI: builds controls and returns a table of useful refs
+local function createUI()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "AimlockUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- center reticle
+	local circle = Instance.new("Frame")
+	circle.Name = "Reticle"
+	circle.AnchorPoint = Vector2.new(0.5, 0.5)
+	circle.Position = UDim2.fromScale(0.5, 0.5)
+	circle.Size = UDim2.fromOffset(CircleRadius*2, CircleRadius*2)
+	circle.BackgroundTransparency = 1
+	circle.Parent = gui
+	local stroke = Instance.new("UIStroke")
+	stroke.Parent = circle
+	stroke.Thickness = SETTINGS.CircleThickness
+	stroke.Color = Color3.fromRGB(255, 60, 60)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = circle
+
+	-- panel
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.Position = UDim2.fromOffset(60, 60)
+	panel.Size = UDim2.fromOffset(280, 260)
+	panel.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+	panel.BackgroundTransparency = 0.08
+	panel.Parent = gui
+	Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
+	local panelStroke = Instance.new("UIStroke", panel)
+	panelStroke.Color = Color3.fromRGB(255,60,60)
+	panelStroke.Thickness = 1
+
+	local title = Instance.new("TextLabel", panel)
+	title.Position = UDim2.fromOffset(12, 6)
+	title.Size = UDim2.fromOffset(220, 20)
+	title.BackgroundTransparency = 1
+	title.Text = "Aimlock Controls"
+	title.TextColor3 = Color3.new(1,1,1)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 18
+	title.TextXAlignment = Enum.TextXAlignment.Left
+
+	-- Aimlock toggle
+	local toggle = Instance.new("TextButton", panel)
+	toggle.Position = UDim2.fromOffset(12, 36)
+	toggle.Size = UDim2.fromOffset(256, 32)
+	toggle.Text = "Aimlock: ON"
+	toggle.Font = Enum.Font.Gotham
+	toggle.TextSize = 16
+	toggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,8)
+
+	-- ESP toggle
+	local espToggle = Instance.new("TextButton", panel)
+	espToggle.Position = UDim2.fromOffset(12, 74)
+	espToggle.Size = UDim2.fromOffset(256, 32)
+	espToggle.Text = "ESP: ON"
+	espToggle.Font = Enum.Font.Gotham
+	espToggle.TextSize = 16
+	espToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	Instance.new("UICorner", espToggle).CornerRadius = UDim.new(0,8)
+
+	-- Ignore teammates toggle
+	local teamToggle = Instance.new("TextButton", panel)
+	teamToggle.Position = UDim2.fromOffset(12, 112)
+	teamToggle.Size = UDim2.fromOffset(256, 32)
+	teamToggle.Text = "Ignore Teammates: ON"
+	teamToggle.Font = Enum.Font.Gotham
+	teamToggle.TextSize = 16
+	teamToggle.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	Instance.new("UICorner", teamToggle).CornerRadius = UDim.new(0,8)
+
+	-- slider factory
+	local function makeSlider(parent, name, y)
+		local label = Instance.new("TextLabel", parent)
+		label.Position = UDim2.fromOffset(12, y)
+		label.Size = UDim2.fromOffset(256, 16)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Gotham
+		label.TextSize = 14
+		label.TextColor3 = Color3.fromRGB(220,220,220)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Text = name
+
+		local track = Instance.new("Frame", parent)
+		track.Position = UDim2.fromOffset(12, y+18)
+		track.Size = UDim2.fromOffset(256, 10)
+		track.BackgroundColor3 = Color3.fromRGB(55,55,55)
+		Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
+
+		local fill = Instance.new("Frame", track)
+		fill.Name = "Fill"
+		fill.Size = UDim2.fromOffset(0,10)
+		fill.BackgroundColor3 = Color3.fromRGB(255,60,60)
+		Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
+
+		local knob = Instance.new("Frame", track)
+		knob.Name = "Knob"
+		knob.Size = UDim2.fromOffset(16,16)
+		knob.Position = UDim2.fromOffset(-8, -3)
+		knob.BackgroundColor3 = Color3.fromRGB(240,240,240)
+		Instance.new("UICorner", knob).CornerRadius = UDim.new(1,0)
+		local kStroke = Instance.new("UIStroke", knob)
+		kStroke.Color = Color3.fromRGB(255,60,60)
+
+		return label, track, fill, knob
+	end
+
+	local radiusLabel, radiusTrack, radiusFill, radiusKnob = makeSlider(panel, "Radius: 0", 150)
+	local smoothLabel, smoothTrack, smoothFill, smoothKnob = makeSlider(panel, "Smoothness: 0.00", 190)
+
+	-- Settings button (open/close) - mobile friendly
+	local settingsBtn = Instance.new("TextButton", gui)
+	settingsBtn.Size = UDim2.fromOffset(52, 52)
+	settingsBtn.Position = UDim2.fromOffset(10, Camera.ViewportSize.Y/2 - 80)
+	settingsBtn.Text = "⚙"
+	settingsBtn.Font = Enum.Font.GothamBold
+	settingsBtn.TextSize = 28
+	settingsBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(1,0)
+
+	-- Functions to refresh visuals
+	local function setAimlockVisual()
+		toggle.Text = AimlockEnabled and "Aimlock: ON" or "Aimlock: OFF"
+		circle.Visible = AimlockEnabled
+	end
+
+	local function setESPVisual()
+		espToggle.Text = ESPEnabled and "ESP: ON" or "ESP: OFF"
+	end
+
+	local function setTeamVisual()
+		teamToggle.Text = SETTINGS.IgnoreTeammates and "Ignore Teammates: ON" or "Ignore Teammates: OFF"
+	end
+
+	local function setSliderVisual(track, fill, knob, minVal, maxVal, value)
+		local width = track.AbsoluteSize.X
+		if width <= 0 then return end
+		local a = (value - minVal) / (maxVal - minVal)
+		a = math.clamp(a, 0, 1)
+		local px = math.floor(a * width)
+		fill.Size = UDim2.fromOffset(px, track.Size.Y.Offset)
+		knob.Position = UDim2.fromOffset(px - math.floor(knob.Size.X.Offset/2), -3)
+	end
+
+	-- refreshAll (call after layout and when values change)
+	local function refreshAll()
+		radiusLabel.Text = ("Radius: %d px"):format(CircleRadius)
+		smoothLabel.Text = ("Smoothness: %.2f"):format(Smoothness)
+		circle.Size = UDim2.fromOffset(CircleRadius*2, CircleRadius*2)
+
+		setSliderVisual(radiusTrack, radiusFill, radiusKnob, SETTINGS.MinRadius, SETTINGS.MaxRadius, CircleRadius)
+		setSliderVisual(smoothTrack, smoothFill, smoothKnob, SETTINGS.MinSmooth, SETTINGS.MaxSmooth, Smoothness)
+	end
+
+	-- bind UI interactions
+	toggle.MouseButton1Click:Connect(function()
+		AimlockEnabled = not AimlockEnabled
+		setAimlockVisual()
+	end)
+
+	espToggle.MouseButton1Click:Connect(function()
+		ESPEnabled = not ESPEnabled
+		setESPVisual()
+	end)
+
+	teamToggle.MouseButton1Click:Connect(function()
+		SETTINGS.IgnoreTeammates = not SETTINGS.IgnoreTeammates
+		setTeamVisual()
+	end)
+
+	-- slider input handling
+	local function sliderNameFromTrack(track)
+		if track.Name:match("Radius") then return "Radius" end
+		return "Smoothness"
+	end
+
+	for _, track in pairs({radiusTrack, smoothTrack}) do
+		track.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				DraggingSlider = sliderNameFromTrack(track)
+				-- immediate update
+				local x = input.Position.X
+				if DraggingSlider == "Radius" then
+					local left = track.AbsolutePosition.X
+					local w = track.AbsoluteSize.X
+					if w > 0 then
+						local a = math.clamp((x - left) / w, 0, 1)
+						CircleRadius = math.floor(SETTINGS.MinRadius + a * (SETTINGS.MaxRadius - SETTINGS.MinRadius))
+					end
+				else
+					local left = track.AbsolutePosition.X
+					local w = track.AbsoluteSize.X
+					if w > 0 then
+						local a = math.clamp((x - left) / w, 0, 1)
+						Smoothness = SETTINGS.MinSmooth + a * (SETTINGS.MaxSmooth - SETTINGS.MinSmooth)
+					end
+				end
+				refreshAll()
+			end
+		end)
+	end
+
+	UserInputService.InputChanged:Connect(function(input)
+		if not DraggingSlider then return end
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			local x = input.Position.X
+			local track = (DraggingSlider == "Radius") and radiusTrack or smoothTrack
+			local left = track.AbsolutePosition.X
+			local w = track.AbsoluteSize.X
+			if w <= 0 then return end
+			local a = math.clamp((x - left) / w, 0, 1)
+			if DraggingSlider == "Radius" then
+				CircleRadius = math.floor(SETTINGS.MinRadius + a * (SETTINGS.MaxRadius - SETTINGS.MinRadius))
+			else
+				Smoothness = SETTINGS.MinSmooth + a * (SETTINGS.MaxSmooth - SETTINGS.MinSmooth)
+			end
+			refreshAll()
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if DraggingSlider and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			DraggingSlider = nil
+		end
+	end)
+
+	-- hotkeys for PC
+	UserInputService.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if input.KeyCode == SETTINGS.ToggleKey then
+			AimlockEnabled = not AimlockEnabled
+			setAimlockVisual()
+		elseif input.KeyCode == SETTINGS.PanelToggleKey then
+			PanelVisible = not PanelVisible
+			panel.Visible = PanelVisible
+		end
+	end)
+
+	-- settings button
+	settingsBtn.MouseButton1Click:Connect(function()
+		PanelVisible = not PanelVisible
+		panel.Visible = PanelVisible
+	end)
+
+	-- initial visuals (defer a tiny bit so AbsoluteSize is set)
+	delay(0.03, function()
+		setAimlockVisual()
+		setESPVisual()
+		setTeamVisual()
+		refreshAll()
+	end)
+
+	return {
+		ScreenGui = gui,
+		Reticle = circle,
+		Panel = panel,
+		RadiusTrack = radiusTrack,
+		SmoothTrack = smoothTrack,
+		Refresh = refreshAll,
+	}
+end
+
+local ui = createUI()
+local circle = ui.Reticle
 
 -- Helpers
 local function isAlive(char)
@@ -127,15 +386,26 @@ local function dist2(a,b)
 	return math.sqrt(dx*dx + dy*dy)
 end
 
-local function hasLineOfSight(part, char)
-	if not part or not char then return false end
+local function hasLineOfSight(head, char)
+	if not head or not char then return false end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Blacklist
 	params.FilterDescendantsInstances = {char, LocalPlayer.Character}
 	local origin = Camera.CFrame.Position
-	local dir = (part.Position - origin)
+	local dir = (head.Position - origin)
 	local result = Workspace:Raycast(origin, dir, params)
 	return result == nil
+end
+
+-- 🎯 Get all possible target parts of a character
+local function getTargetParts(char)
+	local parts = {}
+	for _, v in ipairs(char:GetChildren()) do
+		if v:IsA("BasePart") then
+			table.insert(parts, v)
+		end
+	end
+	return parts
 end
 
 -- find target inside circle, visible, obeying team toggle
@@ -147,9 +417,31 @@ local function findTarget()
 
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= LocalPlayer then
-			if SETTINGS.IgnoreTeammates and plr.Team == LocalPlayer.Team then
-				-- skip teammate
+			-- team filter
+			if SETTINGS.IgnoreTeammates then
+				if plr.Team and LocalPlayer.Team and plr.Team == LocalPlayer.Team then
+					-- skip teammate
+				else
+					local char = plr.Character
+					if isAlive(char) then
+						local head = getHead(char)
+						if head then
+							local screen = Camera:WorldToViewportPoint(head.Position)
+							if screen.Z > 0 then
+								local pt = Vector2.new(screen.X, screen.Y)
+								local d = dist2(pt, center)
+								if d <= CircleRadius and d < bestDist then
+									if hasLineOfSight(head, char) then
+										bestDist = d
+										bestPlayer = plr
+									end
+								end
+							end
+						end
+					end
+				end
 			else
+				-- not ignoring teammates -> allow everyone
 				local char = plr.Character
 				if isAlive(char) then
 					local head = getHead(char)
@@ -176,32 +468,71 @@ end
 
 -- Update loop
 RunService.RenderStepped:Connect(function()
-	-- ESP update (same as before, unchanged)...
+	-- update ESPs (create and resize to character bounding box projected on screen)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local char = plr.Character
+			if char then
+				local esp = ensureESPForPlayer(plr)
+				-- If ESP disabled, we still ensured it's present but we toggle .Enabled above
+				if esp and esp.Enabled then
+					-- compute bounding box
+					local bboxCFrame, bboxSize = safeGetBoundingBox(char)
+					if bboxCFrame and bboxSize then
+						-- compute top/bottom/left/right world points of bbox (axis aligned with bboxCFrame)
+						local topWorld = bboxCFrame.Position + bboxCFrame.UpVector * (bboxSize.Y * 0.5)
+						local bottomWorld = bboxCFrame.Position - bboxCFrame.UpVector * (bboxSize.Y * 0.5)
+						-- use right/left relative to bboxCFrame right vector
+						local rightWorld = bboxCFrame.Position + bboxCFrame.RightVector * (bboxSize.X * 0.5)
+						local leftWorld  = bboxCFrame.Position - bboxCFrame.RightVector * (bboxSize.X * 0.5)
 
+						local topS = Camera:WorldToViewportPoint(topWorld)
+						local bottomS = Camera:WorldToViewportPoint(bottomWorld)
+						local rightS = Camera:WorldToViewportPoint(rightWorld)
+						local leftS = Camera:WorldToViewportPoint(leftWorld)
+
+						-- ensure points are in front of camera (z>0), otherwise set a default small size
+						if topS.Z > 0 and bottomS.Z > 0 and rightS.Z > 0 and leftS.Z > 0 then
+							local pxH = math.max(4, math.abs(topS.Y - bottomS.Y))
+							local pxW = math.max(4, math.abs(rightS.X - leftS.X))
+							esp.Size = UDim2.fromOffset(pxW, pxH)
+						else
+							-- fallback
+							esp.Size = UDim2.fromOffset(40, 90)
+						end
+					else
+						esp.Size = UDim2.fromOffset(40, 90)
+					end
+				end
+			end
+		end
+	end
+
+	-- aimlock behavior
 	if not AimlockEnabled then
-		CurrentTarget, TargetPart = nil, nil
+		CurrentTarget = nil
 		return
 	end
 
 	local newTarget = findTarget()
-	if newTarget ~= CurrentTarget then
-		-- 🎯 New target found, choose a random body part
-		CurrentTarget = newTarget
-		if CurrentTarget and CurrentTarget.Character then
-			local parts = getTargetParts(CurrentTarget.Character)
-			if #parts > 0 then
-				TargetPart = parts[math.random(1, #parts)]
-			else
-				TargetPart = getHead(CurrentTarget.Character)
-			end
-		else
-			TargetPart = nil
-		end
-	end
+    if newTarget ~= CurrentTarget then
+	    -- 🎯 New target found, pick a random body part
+	    CurrentTarget = newTarget
+	    if CurrentTarget and CurrentTarget.Character then
+		    local parts = getTargetParts(CurrentTarget.Character)
+		    if #parts > 0 then
+			    TargetPart = parts[math.random(1, #parts)]
+		    else
+		    	TargetPart = getHead(CurrentTarget.Character)
+	    	end
+	    else
+	    	TargetPart = nil
+	    end
+    end
 
-	if CurrentTarget and TargetPart then
-		local camPos = Camera.CFrame.Position
-		local desired = CFrame.lookAt(camPos, TargetPart.Position)
-		Camera.CFrame = Camera.CFrame:Lerp(desired, math.clamp(Smoothness, 0, 1))
-	end
+    if CurrentTarget and TargetPart then
+	    local camPos = Camera.CFrame.Position
+    	local desired = CFrame.lookAt(camPos, TargetPart.Position)
+    	Camera.CFrame = Camera.CFrame:Lerp(desired, math.clamp(Smoothness, 0, 1))
+    end
 end)
