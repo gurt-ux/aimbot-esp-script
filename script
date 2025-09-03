@@ -48,13 +48,13 @@ local function getESP(player)
 		esp.AlwaysOnTop = true
 		esp.Adornee = torso
 		esp.MaxDistance = 5000
-		esp.Size = UDim2.new(1, 0, 1, 0) -- matches torso size
+		esp.Size = UDim2.new(1, 0, 0, 10) -- matches torso size
 		esp.Parent = torso
 
 		local box = Instance.new("Frame")
 		box.Size = UDim2.fromScale(1, 1)
 		box.BackgroundColor3 = SETTINGS.ESPColor
-		box.BackgroundTransparency = 0.6 -- more transparent
+		box.BackgroundTransparency = 0.35 -- more transparent
 		box.BorderSizePixel = 0
 		box.Parent = esp
 	end
