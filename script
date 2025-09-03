@@ -13,7 +13,7 @@ local Camera = Workspace.CurrentCamera
 local SETTINGS = {
 	MinRadius = 60,
 	MaxRadius = 350,
-	DefaultRadius = 160,
+	DefaultRadius = 60,
 
 	MinSmooth = 0.05,
 	MaxSmooth = 0.5,
@@ -184,7 +184,7 @@ local function createUI()
 		label.BackgroundTransparency = 1
 		label.Font = Enum.Font.Gotham
 		label.TextSize = 14
-		label.TextColor3 = Color3.fromRGB(220,220,220)
+		label.TextColor3 = Color3.fromRGB(1,1,1)
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.Text = name
 
