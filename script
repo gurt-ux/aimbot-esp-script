@@ -405,14 +405,25 @@ RunService.RenderStepped:Connect(function()
 		return
 	end
 
-	CurrentTarget = findTarget()
-    if CurrentTarget then
-    	local char = CurrentTarget.Character
-    	local head = char and getHead(char)
-    	if head then
-    		local camPos = Camera.CFrame.Position
-	    	local desired = CFrame.lookAt(camPos, head.Position)
-    		Camera.CFrame = Camera.CFrame:Lerp(desired, math.clamp(Smoothness, 0, 1))
+	local newTarget = findTarget()
+    if newTarget ~= CurrentTarget then
+    	-- 🎯 New target found, pick a random body part
+    	CurrentTarget = newTarget
+    	if CurrentTarget and CurrentTarget.Character then
+	    	local parts = getTargetParts(CurrentTarget.Character)
+	    	if #parts > 0 then
+	    		TargetPart = parts[math.random(1, #parts)]
+	    	else
+	    		TargetPart = getHead(CurrentTarget.Character)
+	    	end
+    	else
+	    	TargetPart = nil
     	end
+    end
+
+    if CurrentTarget and TargetPart then
+    	local camPos = Camera.CFrame.Position
+    	local desired = CFrame.lookAt(camPos, TargetPart.Position)
+    	Camera.CFrame = Camera.CFrame:Lerp(desired, math.clamp(Smoothness, 0, 1))
     end
 end)
